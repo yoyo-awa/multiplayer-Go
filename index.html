@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>多人围棋 · 混色连片吃子 · 19路</title>
+    <style>
+        * { box-sizing: border-box; user-select: none; }
+        body {
+            background: #1a2a32;
+            display: flex; justify-content: center; align-items: center;
+            min-height: 100vh; margin: 0;
+            font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+        }
+        .game-container {
+            background: #2e4a5c; padding: 2rem 2rem 1.8rem;
+            border-radius: 2.5rem;
+            box-shadow: 0 20px 30px rgba(0, 0, 0, 0.6), inset 0 1px 4px rgba(255, 255, 255, 0.2);
+        }
+        h1 {
+            text-align: center; margin: 0 0 0.5rem 0;
+            font-weight: 500; font-size: 1.8rem; letter-spacing: 2px;
+            color: #e9f2f0; text-shadow: 0 2px 4px #0f1a1f;
+        }
+        .sub {
+            text-align: center; margin: -0.2rem 0 1rem 0;
+            font-size: 0.9rem; color: #b6d0d9; font-weight: 300;
+        }
+        canvas {
+            display: block; margin: 0 auto; border-radius: 20px;
+            box-shadow: 0 12px 18px rgba(0, 0, 0, 0.5), 0 0 0 2px #587b8a inset;
+            background: #e8d5b5; cursor: pointer; transition: filter 0.2s;
+        }
+        .info-panel {
+            display: flex; justify-content: space-between; align-items: center;
+            gap: 12px; margin-top: 1rem; color: #e0efed; background: #1f3a46;
+            padding: 0.7rem 1.2rem; border-radius: 40px;
+            box-shadow: inset 0 3px 8px #0f1e24, 0 6px 10px #0f1e24;
+            font-weight: 500; flex-wrap: wrap;
+        }
+        .turn-indicator { display: flex; align-items: center; gap: 10px; }
+        .stone-dot {
+            width: 26px; height: 26px; border-radius: 50%;
+            background: #d94f4f; box-shadow: 0 0 0 2px #ffffff30, 0 4px 6px #00000050;
+            transition: background 0.2s, box-shadow 0.2s;
+        }
+        .stone-dot.active { box-shadow: 0 0 0 3px #ffffff90, 0 0 12px #fff8b0; }
+
+        .capture-stats {
+            display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+            background: #162b34; padding: 0.3rem 0.8rem;
+            border-radius: 30px; box-shadow: inset 0 2px 5px #0b161b;
+        }
+        .stat-item {
+            display: flex; align-items: center; gap: 5px;
+            font-size: 0.95rem; font-weight: 600; color: #c0d6de;
+            padding: 0.15rem 0.5rem; border-radius: 20px;
+            transition: background 0.2s, color 0.2s;
+        }
+        .stat-item.active { background: #2e4a5c; color: #fff; box-shadow: 0 0 0 1px #ffffff20; }
+        .stat-dot { width: 13px; height: 13px; border-radius: 50%; box-shadow: 0 0 0 1px #ffffff40; }
+        .stat-count { min-width: 1.2em; text-align: center; }
+
+        button {
+            background: #c9d9d3; border: none; color: #1a2f38;
+            font-weight: 600; font-size: 1rem; padding: 0.5rem 1.3rem;
+            border-radius: 40px; cursor: pointer;
+            box-shadow: 0 5px 0 #6b8a94, 0 6px 12px black;
+            transition: 0.07s ease; letter-spacing: 0.5px;
+        }
+        button:active { transform: translateY(4px); box-shadow: 0 1px 0 #6b8a94, 0 6px 12px black; }
+        .message {
+            flex: 1 1 140px; color: #fff3d1; font-size: 0.95rem;
+            text-align: right; min-width: 120px;
+        }
+
+        /* ---------- 开局设置弹窗 ---------- */
+        .modal-overlay {
+            position: fixed; inset: 0; background: rgba(0, 0, 0, 0.65);
+            display: flex; justify-content: center; align-items: center;
+            z-index: 100; backdrop-filter: blur(4px);
+        }
+        .modal {
+            background: #1f3a46; border-radius: 28px; padding: 2rem 2rem 1.6rem;
+            width: 520px; max-width: 92vw; max-height: 88vh; overflow-y: auto;
+            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.7), inset 0 1px 3px rgba(255,255,255,0.15);
+            color: #e0efed;
+        }
+        .modal h2 { margin: 0 0 0.3rem; font-weight: 500; font-size: 1.5rem; letter-spacing: 1px; }
+        .modal .hint { font-size: 0.85rem; color: #9db8c2; margin-bottom: 1.2rem; }
+
+        .player-count-row {
+            display: flex; align-items: center; gap: 12px; margin-bottom: 1.4rem;
+            background: #162b34; padding: 0.8rem 1rem; border-radius: 16px;
+        }
+        .player-count-row label { font-weight: 600; font-size: 0.95rem; }
+        .player-count-row select {
+            background: #2e4a5c; color: #fff; border: 1px solid #587b8a;
+            border-radius: 10px; padding: 0.4rem 0.8rem; font-size: 1rem;
+            font-weight: 600; cursor: pointer; outline: none;
+        }
+
+        .player-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 1.4rem; }
+        .player-row {
+            display: flex; align-items: center; gap: 12px;
+            background: #162b34; padding: 0.6rem 1rem; border-radius: 16px;
+            box-shadow: inset 0 2px 5px #0b161b;
+        }
+        .player-row .p-index {
+            width: 28px; height: 28px; border-radius: 50%;
+            background: #2e4a5c; display: flex; justify-content: center; align-items: center;
+            font-size: 0.85rem; font-weight: 700; color: #c0d6de;
+        }
+        .player-row .p-preview {
+            width: 24px; height: 24px; border-radius: 50%;
+            box-shadow: 0 0 0 2px #ffffff30, 0 3px 5px #00000050;
+        }
+        .player-row select {
+            flex: 1; background: #2e4a5c; color: #fff; border: 1px solid #587b8a;
+            border-radius: 10px; padding: 0.4rem 0.8rem; font-size: 0.95rem;
+            font-weight: 600; cursor: pointer; outline: none;
+        }
+        .player-row .p-warn { font-size: 0.8rem; color: #ffb0a0; margin-left: auto; }
+
+        .modal-actions { display: flex; justify-content: flex-end; gap: 12px; }
+        .modal-actions button.secondary {
+            background: #587b8a; color: #e0efed; box-shadow: 0 5px 0 #3a5561, 0 6px 12px black;
+        }
+        .modal-actions button.secondary:active { box-shadow: 0 1px 0 #3a5561, 0 6px 12px black; }
+        .modal-actions button:disabled {
+            opacity: 0.5; cursor: not-allowed; transform: none !important;
+            box-shadow: 0 5px 0 #6b8a94, 0 6px 12px black !important;
+        }
+    </style>
+</head>
+<body>
+<div class="game-container">
+    <h1>多人围棋 · 连片吃子 · 19路</h1>
+    <div class="sub">混色连通可围吃 · 人数与颜色自由指定</div>
+    <canvas id="boardCanvas" width="760" height="760"></canvas>
+    <div class="info-panel">
+        <div class="turn-indicator">
+            <span>当前</span>
+            <div class="stone-dot" id="turnDot"></div>
+            <span id="turnText">红方</span>
+        </div>
+        <button id="resetBtn">新对局</button>
+        <div class="capture-stats" id="captureStats"></div>
+        <div class="message" id="message"></div>
+    </div>
+</div>
+
+<!-- 开局设置弹窗 -->
+<div class="modal-overlay" id="setupOverlay">
+    <div class="modal">
+        <h2>开局设置</h2>
+        <div class="hint">选择人数（2–7 人），并为每位玩家指定颜色（不可重复）。</div>
+
+        <div class="player-count-row">
+            <label for="playerCountSelect">玩家人数</label>
+            <select id="playerCountSelect">
+                <option value="2">2 人</option>
+                <option value="3" selected>3 人</option>
+                <option value="4">4 人</option>
+                <option value="5">5 人</option>
+                <option value="6">6 人</option>
+                <option value="7">7 人</option>
+            </select>
+        </div>
+
+        <div class="player-list" id="playerList"></div>
+
+        <div class="modal-actions">
+            <button class="secondary" id="cancelSetupBtn">取消</button>
+            <button id="startGameBtn">开始对局</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    (function() {
+        const canvas = document.getElementById('boardCanvas');
+        const ctx = canvas.getContext('2d');
+        const turnDot = document.getElementById('turnDot');
+        const turnText = document.getElementById('turnText');
+        const messageEl = document.getElementById('message');
+        const captureStatsEl = document.getElementById('captureStats');
+
+        const setupOverlay = document.getElementById('setupOverlay');
+        const playerCountSelect = document.getElementById('playerCountSelect');
+        const playerListEl = document.getElementById('playerList');
+        const startGameBtn = document.getElementById('startGameBtn');
+        const cancelSetupBtn = document.getElementById('cancelSetupBtn');
+
+        // ---------- 常量 ----------
+        const BOARD_SIZE = 19;
+        const CELL_SIZE = canvas.width / BOARD_SIZE;
+        const PADDING = CELL_SIZE * 0.5;
+        const RADIUS = CELL_SIZE * 0.42;
+        const DIRS = [[-1,0],[1,0],[0,-1],[0,1]];
+
+        // 可选颜色池（code 用于棋盘数据，name 用于显示）
+        const COLOR_POOL = [
+            { code: 'R', name: '红', hex: '#c44b4b', fill: '#c44b4b', edge: '#8f2e2e', light: '#e07a7a' },
+            { code: 'B', name: '蓝', hex: '#3b7bb7', fill: '#3b7bb7', edge: '#1f4e7a', light: '#6fa3d9' },
+            { code: 'G', name: '绿', hex: '#3f9e6b', fill: '#3f9e6b', edge: '#1e5e3e', light: '#72c49a' },
+            { code: 'Y', name: '黄', hex: '#d9b23b', fill: '#d9b23b', edge: '#8f6f1e', light: '#f0d97a' },
+            { code: 'P', name: '紫', hex: '#8e5bb7', fill: '#8e5bb7', edge: '#5a347a', light: '#b88fd9' },
+            { code: 'O', name: '橙', hex: '#d97a3b', fill: '#d97a3b', edge: '#8f4e1e', light: '#f0a87a' },
+            { code: 'C', name: '青', hex: '#3bb7b7', fill: '#3bb7b7', edge: '#1e7a7a', light: '#7ad9d9' }
+        ];
+        const COLOR_MAP = {};
+        COLOR_POOL.forEach(c => COLOR_MAP[c.code] = c);
+
+        // ---------- 游戏状态 ----------
+        let board = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(null));
+        let players = [];               // [{ code, name, hex }, ...] 按行动顺序
+        let currentPlayerIndex = 0;
+        let gameOver = false;
+        let captureCounts = {};         // { R: 0, B: 0, ... }
+
+        // 临时设置状态
+        let setupPlayerCount = 3;
+        let setupColors = ['R', 'B', 'G']; // 默认
+
+        function currentPlayer() { return players[currentPlayerIndex]; }
+
+        // ---------- 设置界面 ----------
+        function getAvailableColors(selectedColors) {
+            return COLOR_POOL.filter(c => !selectedColors.includes(c.code));
+        }
+
+        function renderPlayerRows() {
+            const n = setupPlayerCount;
+            // 确保 setupColors 长度正确
+            while (setupColors.length < n) {
+                // 自动补一个未使用的颜色
+                const used = new Set(setupColors);
+                const avail = COLOR_POOL.find(c => !used.has(c.code));
+                setupColors.push(avail ? avail.code : 'R');
+            }
+            if (setupColors.length > n) setupColors.length = n;
+
+            playerListEl.innerHTML = '';
+            for (let i = 0; i < n; i++) {
+                const row = document.createElement('div');
+                row.className = 'player-row';
+
+                const idx = document.createElement('div');
+                idx.className = 'p-index';
+                idx.textContent = i + 1;
+
+                const preview = document.createElement('div');
+                preview.className = 'p-preview';
+                preview.style.background = COLOR_MAP[setupColors[i]].hex;
+
+                const select = document.createElement('select');
+                // 选项：所有颜色，但已被其他玩家选择的颜色禁用
+                COLOR_POOL.forEach(c => {
+                    const opt = document.createElement('option');
+                    opt.value = c.code;
+                    opt.textContent = c.name;
+                    if (c.code === setupColors[i]) opt.selected = true;
+                    // 如果被其他玩家选了，禁用
+                    if (setupColors.includes(c.code) && c.code !== setupColors[i]) {
+                        opt.disabled = true;
+                    }
+                    select.appendChild(opt);
+                });
+                select.addEventListener('change', (e) => {
+                    setupColors[i] = e.target.value;
+                    renderPlayerRows(); // 重新渲染以更新禁用状态和预览
+                });
+
+                row.appendChild(idx);
+                row.appendChild(preview);
+                row.appendChild(select);
+                playerListEl.appendChild(row);
+            }
+
+            // 检查是否有重复（理论上通过禁用不会出现）
+            const unique = new Set(setupColors);
+            startGameBtn.disabled = unique.size !== n;
+            if (unique.size !== n) {
+                const warn = document.createElement('div');
+                warn.className = 'p-warn';
+                warn.textContent = '颜色重复，请调整';
+                playerListEl.appendChild(warn);
+            }
+        }
+
+        playerCountSelect.addEventListener('change', (e) => {
+            setupPlayerCount = parseInt(e.target.value, 10);
+            // 调整 setupColors 长度
+            if (setupColors.length > setupPlayerCount) {
+                setupColors = setupColors.slice(0, setupPlayerCount);
+            } else {
+                while (setupColors.length < setupPlayerCount) {
+                    const used = new Set(setupColors);
+                    const avail = COLOR_POOL.find(c => !used.has(c.code));
+                    setupColors.push(avail ? avail.code : 'R');
+                }
+            }
+            renderPlayerRows();
+        });
+
+        startGameBtn.addEventListener('click', () => {
+            // 用设置开始新游戏
+            const used = new Set(setupColors);
+            if (used.size !== setupPlayerCount) {
+                return;
+            }
+            players = setupColors.slice(0, setupPlayerCount).map(code => {
+                const c = COLOR_MAP[code];
+                return { code: c.code, name: c.name, hex: c.hex };
+            });
+            setupOverlay.style.display = 'none';
+            startGame();
+        });
+
+        cancelSetupBtn.addEventListener('click', () => {
+            // 取消则保持当前对局（如果已有对局），或者默认3人开始
+            if (players.length === 0) {
+                // 没有对局，用默认3人开始
+                players = [
+                    { code: 'R', name: '红', hex: '#c44b4b' },
+                    { code: 'B', name: '蓝', hex: '#3b7bb7' },
+                    { code: 'G', name: '绿', hex: '#3f9e6b' }
+                ];
+                startGame();
+            }
+            setupOverlay.style.display = 'none';
+        });
+
+        function showSetup() {
+            // 打开设置时，用当前人数初始化
+            setupPlayerCount = players.length >= 2 ? players.length : 3;
+            if (players.length >= 2) {
+                setupColors = players.map(p => p.code);
+            } else {
+                setupColors = ['R', 'B', 'G'];
+            }
+            playerCountSelect.value = setupPlayerCount;
+            renderPlayerRows();
+            setupOverlay.style.display = 'flex';
+        }
+
+        // ---------- 游戏逻辑 ----------
+        function updateTurnDisplay() {
+            const player = currentPlayer();
+            turnDot.className = 'stone-dot';
+            turnDot.style.background = player.hex;
+            if (player.code === 'R') turnDot.classList.add('red');
+            else if (player.code === 'B') turnDot.classList.add('blue');
+            else if (player.code === 'G') turnDot.classList.add('green');
+            turnText.textContent = player.name + '方';
+
+            // 高亮统计
+            document.querySelectorAll('.stat-item').forEach(el => {
+                el.classList.toggle('active', el.dataset.code === player.code);
+            });
+        }
+
+        function buildCaptureStatsUI() {
+            captureStatsEl.innerHTML = '';
+            players.forEach(p => {
+                const item = document.createElement('div');
+                item.className = 'stat-item';
+                item.dataset.code = p.code;
+                item.id = 'stat_' + p.code;
+
+                const dot = document.createElement('div');
+                dot.className = 'stat-dot';
+                dot.style.background = p.hex;
+
+                const label = document.createElement('span');
+                label.textContent = p.name;
+
+                const count = document.createElement('span');
+                count.className = 'stat-count';
+                count.id = 'capture_' + p.code;
+                count.textContent = '0';
+
+                item.appendChild(dot);
+                item.appendChild(label);
+                item.appendChild(count);
+                captureStatsEl.appendChild(item);
+            });
+        }
+
+        function updateCaptureStats() {
+            players.forEach(p => {
+                const el = document.getElementById('capture_' + p.code);
+                if (el) el.textContent = captureCounts[p.code] || 0;
+            });
+        }
+
+        function setMessage(text, isGood = true) {
+            messageEl.textContent = text;
+            messageEl.style.color = isGood ? '#fff3d1' : '#ffb0a0';
+            clearTimeout(window.msgTimer);
+            window.msgTimer = setTimeout(() => { messageEl.textContent = ''; }, 2500);
+        }
+
+        // 收集连通块：sameColor 为 true 时只连相同颜色，false 时连所有非 null 且非 color 的棋子
+        function collectBlock(startR, startC, sameColor, color, visited) {
+            const block = [];
+            const queue = [[startR, startC]];
+            visited[startR][startC] = true;
+            while (queue.length) {
+                const [r, c] = queue.shift();
+                block.push([r, c]);
+                for (const [dr, dc] of DIRS) {
+                    const nr = r + dr, nc = c + dc;
+                    if (nr < 0 || nr >= BOARD_SIZE || nc < 0 || nc >= BOARD_SIZE) continue;
+                    if (visited[nr][nc]) continue;
+                    const cell = board[nr][nc];
+                    if (cell === null) continue;
+                    if (sameColor ? (cell === color) : (cell !== color)) {
+                        visited[nr][nc] = true;
+                        queue.push([nr, nc]);
+                    }
+                }
+            }
+            return block;
+        }
+
+        function hasLiberty(block) {
+            for (const [r, c] of block) {
+                for (const [dr, dc] of DIRS) {
+                    const nr = r + dr, nc = c + dc;
+                    if (nr < 0 || nr >= BOARD_SIZE || nc < 0 || nc >= BOARD_SIZE) continue;
+                    if (board[nr][nc] === null) return true;
+                }
+            }
+            return false;
+        }
+
+        // 提子：只检查与刚落子相邻的对方块，再连锁
+        function captureAdjacentOpponentBlocks(ownColor, lastRow, lastCol) {
+            const removed = [];
+            const visited = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(false));
+
+            const candidateStarts = [];
+            for (const [dr, dc] of DIRS) {
+                const nr = lastRow + dr, nc = lastCol + dc;
+                if (nr < 0 || nr >= BOARD_SIZE || nc < 0 || nc >= BOARD_SIZE) continue;
+                const cell = board[nr][nc];
+                if (cell !== null && cell !== ownColor && !visited[nr][nc]) {
+                    candidateStarts.push([nr, nc]);
+                }
+            }
+
+            for (const [sr, sc] of candidateStarts) {
+                if (board[sr][sc] === null || board[sr][sc] === ownColor) continue;
+                if (visited[sr][sc]) continue;
+                const block = collectBlock(sr, sc, false, ownColor, visited);
+                if (block.length > 0 && !hasLiberty(block)) {
+                    for (const [rr, cc] of block) {
+                        board[rr][cc] = null;
+                        removed.push([rr, cc]);
+                    }
+                }
+            }
+
+            // 连锁
+            let changed = true;
+            while (changed) {
+                changed = false;
+                const visited2 = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(false));
+                for (let r = 0; r < BOARD_SIZE; r++) {
+                    for (let c = 0; c < BOARD_SIZE; c++) {
+                        const cell = board[r][c];
+                        if (cell === null || cell === ownColor || visited2[r][c]) continue;
+                        const block = collectBlock(r, c, false, ownColor, visited2);
+                        if (block.length > 0 && !hasLiberty(block)) {
+                            for (const [rr, cc] of block) {
+                                board[rr][cc] = null;
+                                removed.push([rr, cc]);
+                            }
+                            changed = true;
+                        }
+                    }
+                }
+            }
+
+            return removed;
+        }
+
+        function isSuicide(row, col, color) {
+            const visited = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(false));
+            const block = collectBlock(row, col, true, color, visited);
+            return !hasLiberty(block);
+        }
+
+        function tryMove(row, col) {
+            if (gameOver) { setMessage('游戏已结束，点击新对局', false); return false; }
+            if (board[row][col] !== null) { setMessage('这里已经有棋子了', false); return false; }
+
+            const player = currentPlayer();
+            const backup = board.map(r => [...r]);
+
+            board[row][col] = player.code;
+            const captured = captureAdjacentOpponentBlocks(player.code, row, col);
+
+            if (isSuicide(row, col, player.code)) {
+                board = backup;
+                setMessage('不能自杀（自己的棋子无气）', false);
+                drawBoard();
+                return false;
+            }
+
+            if (captured.length > 0) {
+                captureCounts[player.code] = (captureCounts[player.code] || 0) + captured.length;
+                updateCaptureStats();
+            }
+
+            drawBoard();
+
+            let hasEmpty = false;
+            for (let r = 0; r < BOARD_SIZE; r++) {
+                for (let c = 0; c < BOARD_SIZE; c++) {
+                    if (board[r][c] === null) { hasEmpty = true; break; }
+                }
+                if (hasEmpty) break;
+            }
+
+            if (!hasEmpty) {
+                gameOver = true;
+                setMessage('棋盘已满，对局结束！', true);
+                updateTurnDisplay();
+                return true;
+            }
+
+            currentPlayerIndex = (currentPlayerIndex + 1) % players.length;
+            updateTurnDisplay();
+
+            if (captured.length > 0) {
+                setMessage(`✨ ${player.name}方吃掉了 ${captured.length} 颗棋子！`, true);
+            } else {
+                setMessage(`${player.name}方落子成功`);
+            }
+            return true;
+        }
+
+        // ---------- 绘制 ----------
+        function drawBoard() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            ctx.lineWidth = 1.8;
+            ctx.strokeStyle = '#5a4a3a';
+            for (let i = 0; i < BOARD_SIZE; i++) {
+                const x = PADDING + i * CELL_SIZE;
+                ctx.beginPath(); ctx.moveTo(x, PADDING); ctx.lineTo(x, canvas.height - PADDING); ctx.stroke();
+            }
+            for (let i = 0; i < BOARD_SIZE; i++) {
+                const y = PADDING + i * CELL_SIZE;
+                ctx.beginPath(); ctx.moveTo(PADDING, y); ctx.lineTo(canvas.width - PADDING, y); ctx.stroke();
+            }
+
+            const starPoints = [3, 9, 15];
+            ctx.fillStyle = '#5a4a3a';
+            for (const r of starPoints) {
+                for (const c of starPoints) {
+                    ctx.beginPath();
+                    ctx.arc(PADDING + c * CELL_SIZE, PADDING + r * CELL_SIZE, 4.5, 0, 2 * Math.PI);
+                    ctx.fill();
+                }
+            }
+
+            for (let r = 0; r < BOARD_SIZE; r++) {
+                for (let c = 0; c < BOARD_SIZE; c++) {
+                    const code = board[r][c];
+                    if (code === null) continue;
+                    const color = COLOR_MAP[code];
+                    if (!color) continue;
+                    const x = PADDING + c * CELL_SIZE;
+                    const y = PADDING + r * CELL_SIZE;
+
+                    ctx.shadowColor = 'rgba(0,0,0,0.4)';
+                    ctx.shadowBlur = 5; ctx.shadowOffsetX = 1.5; ctx.shadowOffsetY = 1.5;
+
+                    const gradient = ctx.createRadialGradient(x-4, y-4, RADIUS*0.3, x, y, RADIUS*1.4);
+                    gradient.addColorStop(0, color.light);
+                    gradient.addColorStop(0.7, color.fill);
+                    gradient.addColorStop(1, color.edge);
+
+                    ctx.beginPath(); ctx.arc(x, y, RADIUS, 0, 2 * Math.PI);
+                    ctx.fillStyle = gradient; ctx.fill();
+
+                    ctx.shadowBlur = 3; ctx.shadowOffsetX = 0.8; ctx.shadowOffsetY = 0.8;
+                    ctx.beginPath(); ctx.arc(x-3, y-3, RADIUS*0.25, 0, 2*Math.PI);
+                    ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.fill();
+
+                    ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
+                    ctx.beginPath(); ctx.arc(x, y, RADIUS, 0, 2 * Math.PI);
+                    ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 1; ctx.stroke();
+                }
+            }
+            ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
+        }
+
+        // ---------- 启动/重置 ----------
+        function startGame() {
+            board = Array(BOARD_SIZE).fill().map(() => Array(BOARD_SIZE).fill(null));
+            currentPlayerIndex = 0;
+            gameOver = false;
+            captureCounts = {};
+            players.forEach(p => captureCounts[p.code] = 0);
+            buildCaptureStatsUI();
+            updateCaptureStats();
+            updateTurnDisplay();
+            drawBoard();
+            setMessage(`对局开始，${players[0].name}方先行`, true);
+        }
+
+        function requestNewGame() {
+            // 点击新对局 -> 弹出设置
+            showSetup();
+        }
+
+        function handleCanvasClick(e) {
+            if (gameOver) { setMessage('游戏已结束，点击“新对局”', false); return; }
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            const mouseX = (e.clientX - rect.left) * scaleX;
+            const mouseY = (e.clientY - rect.top) * scaleY;
+            const col = Math.round((mouseX - PADDING) / CELL_SIZE);
+            const row = Math.round((mouseY - PADDING) / CELL_SIZE);
+            if (row < 0 || row >= BOARD_SIZE || col < 0 || col >= BOARD_SIZE) {
+                setMessage('点击在棋盘外', false); return;
+            }
+            const exactX = PADDING + col * CELL_SIZE;
+            const exactY = PADDING + row * CELL_SIZE;
+            const dist = Math.hypot(mouseX - exactX, mouseY - exactY);
+            if (dist > CELL_SIZE * 0.45) { setMessage('请点击交叉点附近', false); return; }
+            tryMove(row, col);
+        }
+
+        // ---------- 初始化 ----------
+        function init() {
+            // 默认 3 人，红蓝绿
+            players = [
+                { code: 'R', name: '红', hex: '#c44b4b' },
+                { code: 'B', name: '蓝', hex: '#3b7bb7' },
+                { code: 'G', name: '绿', hex: '#3f9e6b' }
+            ];
+            captureCounts = { R: 0, B: 0, G: 0 };
+            buildCaptureStatsUI();
+            updateCaptureStats();
+            updateTurnDisplay();
+            drawBoard();
+
+            canvas.addEventListener('click', handleCanvasClick);
+            document.getElementById('resetBtn').addEventListener('click', requestNewGame);
+
+            // 打开设置界面
+            showSetup();
+        }
+        init();
+    })();
+</script>
+</body>
+</html>
